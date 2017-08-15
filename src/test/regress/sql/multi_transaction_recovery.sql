@@ -1,11 +1,11 @@
-ALTER SEQUENCE pg_catalog.pg_dist_shardid_seq RESTART 1220000;
-
 -- Tests for prepared transaction recovery
 
--- Ensure pg_dist_transaction is empty for test
-SELECT recover_prepared_transactions();
+-- Disable auto-recovery for the initial tests
+ALTER SYSTEM SET citus.recover_2pc_interval TO -1;
+SELECT pg_reload_conf();
 
-SELECT * FROM pg_dist_transaction;
+-- Ensure pg_dist_transaction is empty
+SELECT recover_prepared_transactions();
 
 -- Create some "fake" prepared transactions to recover
 \c - - - :worker_1_port
@@ -106,5 +106,26 @@ hello-1
 SELECT count(*) FROM pg_dist_transaction;
 SELECT recover_prepared_transactions();
 
+-- Create a single-replica table to enable 2PC in multi-statement transactions
+CREATE TABLE test_recovery_single (LIKE test_recovery);
+SELECT create_distributed_table('test_recovery_single', 'x');
+
+-- Multi-statement transactions should write 4 transaction recovery records
+BEGIN;
+INSERT INTO test_recovery_single VALUES ('hello-0');
+INSERT INTO test_recovery_single VALUES ('hello-2');
+COMMIT;
+SELECT count(*) FROM pg_dist_transaction;
+
+-- Test whether auto-recovery runs
+ALTER SYSTEM SET citus.recover_2pc_interval TO 10;
+SELECT pg_reload_conf();
+SELECT pg_sleep(0.1);
+SELECT count(*) FROM pg_dist_transaction;
+
+ALTER SYSTEM RESET citus.recover_2pc_interval;
+SELECT pg_reload_conf();
+
 DROP TABLE test_recovery_ref;
 DROP TABLE test_recovery;
+DROP TABLE test_recovery_single;
