@@ -190,6 +190,36 @@ InitializeMaintenanceDaemonBackend(void)
 }
 
 
+#include "commands/extension.h"
+#include "catalog/pg_extension.h"
+#include "storage/lmgr.h"
+
+static bool
+LockCitusExtension(void)
+{
+	Oid extensionOid = get_extension_oid("citus", true);
+	Oid recheckExtensionOid = InvalidOid;
+
+	if (extensionOid == InvalidOid)
+	{
+		return false;
+	}
+
+	LockDatabaseObject(ExtensionRelationId, extensionOid, 0,
+					   AccessShareLock);
+
+	recheckExtensionOid = get_extension_oid("citus", true);
+
+	if (recheckExtensionOid == InvalidOid ||
+		recheckExtensionOid != extensionOid)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+
 /*
  * CitusMaintenanceDaemonMain is the maintenance daemon's main routine, it'll
  * be started by the background worker infrastructure.  If it errors out,
@@ -272,15 +302,26 @@ CitusMaintenanceDaemonMain(Datum main_arg)
 		{
 			StartTransactionCommand();
 
-			/*
-			 * We don't want to run the deadlock checks if there exists
-			 * any version mistmatch.
-			 */
-			if (CheckCitusVersion(DEBUG1))
+			/* to avoid the extension being dropped while we're using it */
+
+			if (!LockCitusExtension())
 			{
+				elog(DEBUG1,
+					 "skipping deadlock check due to nonexistant or dropped extension");
+			}
+			else if (!CheckCitusVersion(DEBUG1) || !CitusHasBeenLoaded())
+			{
+				/*
+				 * We don't want to run the deadlock checks if there exists
+				 * any version mistmatch.
+				 */
+				elog(DEBUG1, "skipping deadlock check due to prereqs");
+			}
+			else
+			{
+				elog(DEBUG2, "deadlock cycle");
 				foundDeadlock = CheckForDistributedDeadlocks();
 			}
-
 			CommitTransactionCommand();
 
 			/*
