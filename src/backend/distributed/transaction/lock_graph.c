@@ -518,6 +518,11 @@ IsProcessWaitingForRelationExtension(PGPROC *proc)
 	waitProcLock = proc->waitProcLock;
 	waitLock = waitProcLock->tag.myLock;
 
+	if (waitLock->tag.locktag_type == LOCKTAG_TUPLE)
+	{
+		return false;
+	}
+
 	return waitLock->tag.locktag_type == LOCKTAG_RELATION_EXTEND;
 }
 
