@@ -30,9 +30,11 @@
 #include "optimizer/clauses.h"
 #include "optimizer/planner.h"
 #include "optimizer/restrictinfo.h"
+#include "optimizer/tlist.h"
 #include "optimizer/var.h"
 #include "parser/parsetree.h"
 #include "parser/parse_coerce.h"
+#include "parser/parse_oper.h"
 #include "parser/parse_relation.h"
 #include "utils/lsyscache.h"
 
@@ -62,8 +64,11 @@ static DeferredErrorMessage * InsertPartitionColumnMatchesSelect(Query *query,
 static MultiPlan * CreateCoordinatorInsertSelectPlan(Query *parse);
 static DeferredErrorMessage * CoordinatorInsertSelectSupported(Query *insertSelectQuery);
 static Query * WrapSubquery(Query *subquery);
-static void CastSelectTargetList(List *selectTargetList, Oid targetRelationId,
-								 List *insertTargetList);
+static void CastSelectTargetList(Query *selectQuery, Oid targetRelationId,
+								 Query *insertQuery);
+static SortGroupClause * GetOrderByForTargetEntry(List *targetEntryList,
+												  TargetEntry *selectTargetEntry,
+												  List *sortClauseList);
 static bool CheckInsertSelectQuery(Query *query);
 
 
@@ -1148,8 +1153,8 @@ CreateCoordinatorInsertSelectPlan(Query *parse)
 	ReorderInsertSelectTargetLists(insertSelectQuery, insertRte, selectRte);
 
 	/* make sure the SELECT returns the right type for copying into the table */
-	CastSelectTargetList(selectQuery->targetList, targetRelationId,
-						 insertSelectQuery->targetList);
+	CastSelectTargetList(selectQuery, targetRelationId,
+						 insertSelectQuery);
 
 	multiPlan->insertSelectSubquery = selectQuery;
 	multiPlan->insertTargetList = insertSelectQuery->targetList;
@@ -1282,8 +1287,11 @@ WrapSubquery(Query *subquery)
  * form would contain decimal notation, which is not valid for int.
  */
 static void
-CastSelectTargetList(List *selectTargetList, Oid targetRelationId, List *insertTargetList)
+CastSelectTargetList(Query *selectQuery, Oid targetRelationId, Query *insertQuery)
 {
+	List *selectTargetList = selectQuery->targetList;
+	List *insertTargetList = insertQuery->targetList;
+
 	ListCell *insertTargetCell = NULL;
 	ListCell *selectTargetCell = NULL;
 
@@ -1319,6 +1327,10 @@ CastSelectTargetList(List *selectTargetList, Oid targetRelationId, List *insertT
 		 */
 		if (columnType != selectOutputType)
 		{
+			SortGroupClause *sortClause =
+				GetOrderByForTargetEntry(selectTargetList, selectTargetEntry,
+										 selectQuery->sortClause);
+
 			Expr *selectExpression = selectTargetEntry->expr;
 			Expr *typeCastedSelectExpr =
 				(Expr *) coerce_to_target_type(NULL, (Node *) selectExpression,
@@ -1326,7 +1338,49 @@ CastSelectTargetList(List *selectTargetList, Oid targetRelationId, List *insertT
 											   columnTypeMod, COERCION_EXPLICIT,
 											   COERCE_IMPLICIT_CAST, -1);
 
+
 			selectTargetEntry->expr = typeCastedSelectExpr;
+
+			if (sortClause)
+			{
+				Oid lessThanOperator = InvalidOid;
+				Oid equalsOperator = InvalidOid;
+				bool hashable = false;
+
+				get_sort_group_operators(columnType, true, true, true,
+										 &lessThanOperator, &equalsOperator, NULL,
+										 &hashable);
+				sortClause->eqop = equalsOperator;
+				sortClause->hashable = hashable;
+				sortClause->nulls_first = false;
+				sortClause->sortop = lessThanOperator;
+			}
 		}
 	}
+}
+
+
+/*
+ *
+ */
+static SortGroupClause *
+GetOrderByForTargetEntry(List *targetEntryList, TargetEntry *selectTargetEntry,
+						 List *sortClauseList)
+{
+	ListCell *sortClauseCell = NULL;
+
+	foreach(sortClauseCell, sortClauseList)
+	{
+		SortGroupClause *sortClause = (SortGroupClause *) lfirst(sortClauseCell);
+
+		TargetEntry *sortTargetEntry =
+			get_sortgroupclause_tle(sortClause, targetEntryList);
+
+		if (equal(selectTargetEntry, sortTargetEntry))
+		{
+			return sortClause;
+		}
+	}
+
+	return NULL;
 }
