@@ -368,6 +368,8 @@ FindMatchingName(char **nameArray, int nameCount, char *needle,
 	return foundMatchingName;
 }
 
+#include "distributed/transaction_identifier.h"
+#include "distributed/backend_data.h"
 
 /*
  * PendingWorkerTransactionList returns a list of pending prepared
@@ -384,6 +386,18 @@ PendingWorkerTransactionList(MultiConnection *connection)
 	int rowIndex = 0;
 	List *transactionNames = NIL;
 	int coordinatorId = GetLocalGroupId();
+	DistributedTransactionId *distributedTransactionId = NULL;
+
+	appendStringInfoString(command,
+						   "BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;");
+	AssignDistributedTransactionId();
+	distributedTransactionId = GetCurrentDistributedTransactionId();
+	appendStringInfo(command,
+					 "SELECT assign_distributed_transaction_id(%d, %ld, '%s');",
+					 distributedTransactionId->initiatorNodeIdentifier,
+					 distributedTransactionId->transactionNumber,
+					 timestamptz_to_str(distributedTransactionId->timestamp));
+
 
 	appendStringInfo(command, "SELECT gid FROM pg_prepared_xacts "
 							  "WHERE gid LIKE 'citus_%d_%%'",
