@@ -61,7 +61,8 @@ void _PG_init(void);
 static void multi_log_hook(ErrorData *edata);
 static void CreateRequiredDirectories(void);
 static void RegisterCitusConfigVariables(void);
-static void WarningForEnableDeadlockPrevention(bool newval, void *extra);
+static bool WarningForEnableDeadlockPrevention(bool *newval, void **extra,
+											   GucSource source);
 static bool ErrorIfNotASuitableDeadlockFactor(double *newval, void **extra,
 											  GucSource source);
 static void NormalizeWorkerListPath(void);
@@ -463,7 +464,7 @@ RegisterCitusConfigVariables(void)
 		true,
 		PGC_USERSET,
 		GUC_NO_SHOW_ALL,
-		NULL, WarningForEnableDeadlockPrevention, NULL);
+		WarningForEnableDeadlockPrevention, NULL, NULL);
 
 	DefineCustomBoolVariable(
 		"citus.enable_ddl_propagation",
@@ -852,12 +853,18 @@ RegisterCitusConfigVariables(void)
 /*
  * Inform the users about the deprecated flag.
  */
-static void
-WarningForEnableDeadlockPrevention(bool newval, void *extra)
+static bool
+WarningForEnableDeadlockPrevention(bool *newval, void **extra, GucSource source)
 {
+	if (source == PGC_S_DEFAULT || source == PGC_S_DYNAMIC_DEFAULT)
+	{
+		return true;
+	}
+
 	ereport(WARNING, (errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
 					  errmsg("citus.enable_deadlock_prevention is deprecated and it has "
 							 "no effect. The flag will be removed in the next release.")));
+	return true;
 }
 
 
