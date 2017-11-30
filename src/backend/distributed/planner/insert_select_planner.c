@@ -413,7 +413,13 @@ SafeToPushDownSubquery(PlannerRestrictionContext *plannerRestrictionContext,
 
 	if (ContainsUnionSubquery(originalQuery))
 	{
-		return SafeToPushdownUnionSubquery(plannerRestrictionContext);
+		DeferredErrorMessage *pushdownError = NULL;
+
+		pushdownError = SafeToPushdownUnionSubquery(plannerRestrictionContext);
+		if (pushdownError == NULL)
+		{
+			return true;
+		}
 	}
 
 	return false;

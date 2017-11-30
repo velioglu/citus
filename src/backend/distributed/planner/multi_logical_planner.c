@@ -647,16 +647,10 @@ DeferErrorIfUnsupportedSubqueryPushdown(Query *originalQuery,
 	 */
 	if (ContainsUnionSubquery(originalQuery))
 	{
-		if (!SafeToPushdownUnionSubquery(plannerRestrictionContext))
+		error = SafeToPushdownUnionSubquery(plannerRestrictionContext);
+		if (error)
 		{
-			return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
-								 "cannot pushdown the subquery since not all subqueries "
-								 "in the UNION have the partition column in the same "
-								 "position",
-								 "Each leaf query of the UNION should return the "
-								 "partition column in the same position and all joins "
-								 "must be on the partition column",
-								 NULL);
+			return error;
 		}
 	}
 	else if (!RestrictionEquivalenceForPartitionKeys(plannerRestrictionContext))

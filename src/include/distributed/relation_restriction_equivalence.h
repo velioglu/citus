@@ -13,13 +13,14 @@
 #define RELATION_RESTRICTION_EQUIVALENCE_H
 
 #include "distributed/distributed_planner.h"
+#include "distributed/errormessage.h"
 
 
 extern bool ContainsUnionSubquery(Query *queryTree);
 extern bool RestrictionEquivalenceForPartitionKeys(PlannerRestrictionContext *
 												   plannerRestrictionContext);
 extern uint32 ReferenceRelationCount(RelationRestrictionContext *restrictionContext);
-extern bool SafeToPushdownUnionSubquery(
+extern DeferredErrorMessage * SafeToPushdownUnionSubquery(
 	PlannerRestrictionContext *plannerRestrictionContext);
 extern List * RelationIdList(Query *query);
 

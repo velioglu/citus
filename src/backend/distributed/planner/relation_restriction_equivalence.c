@@ -141,7 +141,7 @@ static Index RelationRestrictionPartitionKeyIndex(RelationRestriction *
  * For the above query, although the second item in the target list make this query
  * safe to push down, the function would fail to return true.
  */
-bool
+DeferredErrorMessage *
 SafeToPushdownUnionSubquery(PlannerRestrictionContext *plannerRestrictionContext)
 {
 	RelationRestrictionContext *restrictionContext =
@@ -155,6 +155,7 @@ SafeToPushdownUnionSubquery(PlannerRestrictionContext *plannerRestrictionContext
 	List *relationRestrictionAttributeEquivalenceList = NIL;
 	List *joinRestrictionAttributeEquivalenceList = NIL;
 	List *allAttributeEquivalenceList = NIL;
+	bool relationEquality = false;
 
 	attributeEquivalance->equivalenceId = attributeEquivalenceId++;
 
@@ -182,10 +183,10 @@ SafeToPushdownUnionSubquery(PlannerRestrictionContext *plannerRestrictionContext
 		 */
 		if (PartitionMethod(relationId) == DISTRIBUTE_BY_NONE)
 		{
-			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							errmsg("cannot pushdown this query"),
-							errdetail(
-								"Reference tables are not allowed with set operations")));
+			return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
+								 "cannot pushdown this query",
+								 "Reference tables are not allowed with set operations",
+								 NULL);
 		}
 
 		/*
@@ -272,8 +273,22 @@ SafeToPushdownUnionSubquery(PlannerRestrictionContext *plannerRestrictionContext
 	allAttributeEquivalenceList = lappend(allAttributeEquivalenceList,
 										  attributeEquivalance);
 
-	return EquivalenceListContainsRelationsEquality(allAttributeEquivalenceList,
-													restrictionContext);
+	relationEquality =
+		EquivalenceListContainsRelationsEquality(allAttributeEquivalenceList,
+												 restrictionContext);
+	if (!relationEquality)
+	{
+		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
+							 "cannot pushdown the subquery since not all subqueries "
+							 "in the UNION have the partition column in the same "
+							 "position",
+							 "Each leaf query of the UNION should return the "
+							 "partition column in the same position and all joins "
+							 "must be on the partition column",
+							 NULL);
+	}
+
+	return NULL;
 }
 
 
