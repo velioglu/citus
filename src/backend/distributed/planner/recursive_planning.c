@@ -386,29 +386,9 @@ ShouldRecursivelyPlanSubquery(Query *subquery, RecursivePlanningContext *context
 			/* Citus could plan this subquery through re-partitioning */
 			shouldRecursivelyPlan = false;
 		}
-		else if (DeferErrorIfQueryNotSupported(subquery) == NULL)
-		{
-			/*
-			 * At this point, we might be passing a query with or without
-			 * subqueries to DeferErrorIfQueryNotSupported().
-			 *
-			 * In case of a query without any subqueries, we're OK given that
-			 * DeferErrorIfQueryNotSupported() is purely designed for such queries.
-			 *
-			 * In case of a query with subqueries in it, we're still OK given that
-			 * we had already checked those subqueries via the previous recursive calls
-			 * and each of the subqueries are guaranteed to be safe to pushdown or
-			 * already replaced with intermediate results. Thus, we're only interested
-			 * in the checks that we do do the top-level query.
-			 */
-			shouldRecursivelyPlan = true;
-		}
 		else
 		{
-			/*
-			 * XXX: What about queries that are router plannable but not
-			 * suppoted by logical planner such as windown functions.
-			 */
+			shouldRecursivelyPlan = true;
 		}
 	}
 
