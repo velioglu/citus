@@ -1248,6 +1248,7 @@ AdjustReadIntermediateResultCost(RangeTblEntry *rangeTableEntry, RelOptInfo *rel
 	double rowCost = 0.;
 	double rowSizeEstimate = 0;
 	double rowCountEstimate = 0.;
+	double ioCost = 0.;
 
 	if (rangeTableEntry->rtekind != RTE_FUNCTION ||
 		list_length(rangeTableEntry->functions) != 1)
@@ -1304,6 +1305,9 @@ AdjustReadIntermediateResultCost(RangeTblEntry *rangeTableEntry, RelOptInfo *rel
 		resultSize -= 21;
 	}
 
+	/* start with the cost of evaluating quals */
+	rowCost += relOptInfo->baserestrictcost.per_tuple;
+
 	/* postgres' estimate for the width of the rows */
 	rowSizeEstimate += reltarget->width;
 
@@ -1331,18 +1335,22 @@ AdjustReadIntermediateResultCost(RangeTblEntry *rangeTableEntry, RelOptInfo *rel
 			rowSizeEstimate += 1;
 		}
 
+		/* add the cost of parsing a column */
 		rowCost += get_func_cost(inputFunctionId) * cpu_operator_cost;
 	}
 
 	/* estimate the number of rows based on the file size and estimated row size */
 	rowCountEstimate = Max(1, (double) resultSize / rowSizeEstimate);
 
+	/* cost of reading the data */
+	ioCost = seq_page_cost * resultSize / BLCKSZ;
+
 	Assert(pathList != NIL);
 
 	/* tell the planner about the cost and row count of the function */
 	path = (Path *) linitial(pathList);
 	path->rows = rowCountEstimate;
-	path->total_cost = rowCountEstimate * rowCost;
+	path->total_cost = rowCountEstimate * rowCost + ioCost;
 }
 
 
