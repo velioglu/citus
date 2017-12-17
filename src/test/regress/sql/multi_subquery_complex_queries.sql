@@ -8,8 +8,6 @@
 -- SET citus.next_shard_id TO 1400000;
 ALTER SEQUENCE pg_catalog.pg_dist_jobid_seq RESTART 1400000;
  
-SET citus.enable_router_execution TO FALSE;
-
  -- 
  -- UNIONs and JOINs mixed
  --
@@ -2279,5 +2277,3 @@ GROUP BY
   types
 ORDER BY 
   types;
-
-SET citus.enable_router_execution TO TRUE;

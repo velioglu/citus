@@ -118,7 +118,8 @@ SELECT author_id, sum(word_count) AS corpus_size FROM articles
 
 -- UNION/INTERSECT queries are unsupported if on multiple shards
 SELECT * FROM articles WHERE author_id = 10 UNION
-SELECT * FROM articles WHERE author_id = 2; 
+SELECT * FROM articles WHERE author_id = 2
+ORDER BY 1,2,3;
 
 -- queries using CTEs are supported
 WITH long_names AS ( SELECT id FROM authors WHERE char_length(name) > 15 )

@@ -4,7 +4,6 @@
 -- no need to set shardid sequence given that we're not creating any shards
 
 SET citus.next_shard_id TO 570032;
-SET citus.enable_router_execution TO FALSE;
 
 -- Check that we error out if shard min/max values are not exactly same.
 SELECT
@@ -328,6 +327,8 @@ CREATE TABLE subquery_pruning_varchar_test_table
 SELECT master_create_distributed_table('subquery_pruning_varchar_test_table', 'a', 'hash');
 SELECT master_create_worker_shards('subquery_pruning_varchar_test_table', 4, 1);
 
+-- temporarily disable router executor to test pruning behaviour of subquery pushdown
+SET citus.enable_router_execution TO off;
 SET client_min_messages TO DEBUG2;
 
 SELECT * FROM
@@ -371,6 +372,8 @@ SELECT * FROM
 AS foo;
 
 DROP TABLE subquery_pruning_varchar_test_table;
+
+RESET citus.enable_router_execution;
 
 -- Simple join subquery pushdown
 SELECT
@@ -605,4 +608,3 @@ DROP FUNCTION run_command_on_master_and_workers(p_sql text);
 SET client_min_messages TO DEFAULT;
 
 SET citus.subquery_pushdown to OFF;
-SET citus.enable_router_execution TO 'true';
